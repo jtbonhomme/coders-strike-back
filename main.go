@@ -11,11 +11,11 @@ import (
 // MIN and MAX are min and max ouput values
 // TARGET is the wanted angle between pod and check point, ie 0°
 const (
-	KE     float64 = 210.0
-	KD     float64 = -0.02
-	KI     float64 = -5
+	KE     float64 = 0.0025
+	KD     float64 = -0.025
+	KI     float64 = 0.10
 	MAX    float64 = 100.0
-	MIN    float64 = 0.0
+	MIN    float64 = 5.0
 	TARGET float64 = 0.0
 )
 
@@ -42,13 +42,42 @@ type PIDController struct {
 	prevError  float64   // previous error
 }
 
+// GetPID compute PID
+func GetPID(pc *PIDController, value float64, dt float64) float64 {
+	error := value - pc.setpoint
+	pc.integral = pc.integral + error*dt
+	derivative := (error - pc.prevError) / dt
+	var output = pc.ke*error + pc.ki*pc.integral + pc.kd*derivative
+	if output > MAX {
+		output = MAX
+	} else if output < MIN {
+		output = MIN
+	}
+	pc.prevError = error
+	fmt.Fprintf(os.Stderr, "ke*e: %f; kd*de: %f; ki*ie: %f; o: %f\n",  pc.ke*error, pc.kd*derivative, pc.ki*pc.integral, output)
+	fmt.Fprintf(os.Stderr, "err : %f; deriv: %f; integ: %f; o: %f\n", error, derivative, pc.integral, output)
+	return output
+}
+
+// FeedForward
+func FeedForward(thrust, angle, dist float64) float64 {
+    var output = thrust
+    fmt.Fprintf(os.Stderr, "thrust: %f; angle: %f; dist: %f; out: %f\n", thrust, angle, dist, output)
+    if angle == 0 && dist > 1500 {
+        output = 100
+    } else if angle == 0 && dist < 1500 {
+        output = 60
+    }
+	return output
+}
+
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
  **/
 
 func main() {
-	var pc = PIDController{ke: KE, ki: KI, kd: KD, setpoint: TARGET, integral: 0, lastUpdate: time.Now(), prevError: 0}
+	var pc = PIDController{ke: KE, ki: KI, kd: KD, setpoint: TARGET, integral: 0, lastUpdate: time.Now(), prevError: 20}
 	for {
 		// nextCheckpointX: x position of the next check point
 		// nextCheckpointY: y position of the next check point
@@ -59,28 +88,17 @@ func main() {
 
 		var opponentX, opponentY int
 		fmt.Scan(&opponentX, &opponentY)
-		//dt := float64(time.Since(pc.lastUpdate))
-		fmt.Fprintf(os.Stderr, "dt: %v\n", time.Since(pc.lastUpdate))
-		fmt.Fprintf(os.Stderr, "angle: %v\n", nextCheckpointAngle)
-		var dt = 0.1
+		dt:= float64(time.Since(pc.lastUpdate))/1e9
+		fmt.Fprintf(os.Stderr, "dt: %f angle: %v dist : %v\n", dt, nextCheckpointAngle, nextCheckpointDist)
 
 		//		p1 := Point{x: x, y: y}
 		//		p2 := Point{x: nextCheckpointX, y: nextCheckpointY}
 		//		p3 := Point{x: opponentX, y: opponentY}
 
-		error := math.Abs(math.Cos(nextCheckpointAngle - pc.setpoint))
-		pc.integral = pc.integral + error*dt
-		derivative := (error - pc.prevError) / dt
-		var thrust = pc.ke*error + pc.ki*pc.integral + pc.kd*derivative
-		if thrust > MAX {
-			thrust = MAX
-		} else if thrust < MIN {
-			thrust = MIN
-		}
-		fmt.Fprintf(os.Stderr, "output: %f; %f; %f; %f\n", error, derivative, pc.integral, thrust)
-		pc.prevError = error
+		thrust := GetPID(&pc, nextCheckpointDist, dt)
 		pc.lastUpdate = time.Now()
-
+        thrust = FeedForward(thrust, nextCheckpointAngle, nextCheckpointDist)
+        
 		// You have to output the target position
 		// followed by the power (0 <= thrust <= 100)
 		// i.e.: "x y thrust"
