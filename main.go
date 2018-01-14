@@ -7,26 +7,52 @@ import (
 	//	"time"
 )
 
+// Minimum distance for activiating boost
+const boostRadius = 2000
+
+// Distance starting from the middle of the checkpoint for the racer to aim for
+const radius = 350
+
+// Distance steps for slowing down the racer
+const brakeStep1 = 1300
+const brakeStep2 = 1100
+const brakeStep3 = 800
+
+var boostAvailable = true
+
+// Point structure
+type Point struct {
+	x float64 // x coordinate
+	y float64 // y coordinate
+}
+
+func getDistance(p1, p2 Point) float64 {
+	var dist float64
+	dist = math.Sqrt(math.Pow((p1.x-p2.x), 2) + math.Pow((p1.y-p2.y), 2))
+	return dist
+}
+
 // FeedForward ...
-func FeedForward(thrust, angle, dist float64, boosted bool) (float64, bool) {
-	var output = thrust
+func getThrust(angle, dist float64) (float64, bool) {
+	var output = 100.0
 	var boost = false
 	angle = math.Abs(angle)
-	fmt.Fprintf(os.Stderr, "thrust: %f; angle: %f; dist: %f; out: %f\n", thrust, angle, dist, output)
 
-	if !boosted && dist > 6500 && angle < 4 {
+	if boostAvailable && dist > boostRadius && angle < 4 {
 		boost = true
 	}
 
-	if dist > 2500 && angle < 10 {
-		output = 100
-	} else if dist < 1150 && angle < 10 {
+	if angle > 90 {
 		output = 0
-	} else if angle > 60 {
+	} else if dist <= brakeStep3 {
+		output = 25
+	} else if dist <= brakeStep2 {
 		output = 50
-	} else {
-		output = 85
+	} else if dist <= brakeStep1 {
+		output = 75
 	}
+
+	fmt.Fprintf(os.Stderr, "angle: %f; dist: %f; out: %f\n", angle, dist, output)
 	return output, boost
 }
 
@@ -36,7 +62,6 @@ func FeedForward(thrust, angle, dist float64, boosted bool) (float64, bool) {
  **/
 
 func main() {
-	var boosted = false
 	for {
 		// nextCheckpointX: x position of the next check point
 		// nextCheckpointY: y position of the next check point
@@ -46,17 +71,16 @@ func main() {
 		fmt.Scan(&x, &y, &nextCheckpointX, &nextCheckpointY, &nextCheckpointDist, &nextCheckpointAngle)
 
 		var opponentX, opponentY int
-		var boost = false
 		fmt.Scan(&opponentX, &opponentY)
-		thrust := 100.0
-		thrust, boost = FeedForward(thrust, nextCheckpointAngle, nextCheckpointDist, boosted)
+
+		thrust, boost := getThrust(nextCheckpointAngle, nextCheckpointDist)
 
 		// You have to output the target position
 		// followed by the power (0 <= thrust <= 100)
 		// i.e.: "x y thrust"
-		if boost == true && !boosted {
+		if boost == true && boostAvailable == true {
 			fmt.Printf("%d %d BOOST BOOST\n", int(nextCheckpointX), int(nextCheckpointY))
-			boosted = true
+			boostAvailable = false
 		} else {
 			fmt.Printf("%d %d %d %d\n", int(nextCheckpointX), int(nextCheckpointY), int(thrust), int(thrust))
 		}
